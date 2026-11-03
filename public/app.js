@@ -1328,6 +1328,12 @@ function startRoleSession(role) {
   connectRoomSync();
   initPeerJS();
 
+  // Keep-Alive para que el servidor de Render nunca entre en reposo mientras un teléfono esté activo
+  if (state.keepAliveTimer) clearInterval(state.keepAliveTimer);
+  state.keepAliveTimer = setInterval(() => {
+    sendTelemetryUpdate();
+  }, 45000);
+
   if (role === 'patient') {
     el('patientScreen')?.classList.remove('hidden');
     el('caregiverScreen')?.classList.add('hidden');
@@ -1511,18 +1517,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // Modal Online / APK
   const openModal = async () => {
     el('apkModal')?.classList.remove('hidden');
-    try {
-      const res = await fetch('/api/server-info');
-      const info = await res.json();
-      const box = el('serverUrlList');
-      if (box && info.localIPs?.length) {
-        box.innerHTML = info.localIPs.map((ip) => `http://${ip}:${info.port}`).join('<br/>');
-      } else if (box) {
-        box.textContent = window.location.origin;
-      }
-    } catch {
-      const box = el('serverUrlList');
-      if (box) box.textContent = window.location.origin;
+    const box = el('serverUrlList');
+    if (box) {
+      box.innerHTML = `🌐 Enlace Online (4G/5G/Wi-Fi): <strong>https://ciudado.onrender.com</strong><br/>📍 Servidor actual: ${window.location.origin}`;
     }
   };
   el('btnOpenApkModal')?.addEventListener('click', openModal);

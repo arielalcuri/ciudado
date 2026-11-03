@@ -4,6 +4,7 @@
   "webDir": "public",
   "bundledWebRuntime": false,
   "server": {
+    "url": "https://ciudado.onrender.com",
     "androidScheme": "https",
     "cleartext": true
   },
@@ -13,4 +14,3 @@
     "webContentsDebuggingEnabled": true
   }
 }
-
