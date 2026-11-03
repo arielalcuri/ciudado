@@ -1,0 +1,26 @@
+{
+  "name": "Cuidado Familiar - Monitoreo y Asistencia",
+  "short_name": "CuidadoFamiliar",
+  "description": "Aplicación familiar de monitoreo post-ACV: GPS en vivo, historial de rutas, detección de movimientos/caídas e intercomunicador de cámara y voz con auto-respuesta.",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#e11d48",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "permissions": [
+    "geolocation",
+    "camera",
+    "microphone",
+    "notifications",
+    "wake-lock"
+  ]
+}
+

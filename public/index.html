@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#e11d48" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Cuidado Familiar - Monitoreo Multi-Perfil GPS, Ruta y Cámara</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- PeerJS (WebRTC P2P Global por Internet) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <style>
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overscroll-behavior-y: contain;
+      user-select: none;
+    }
+    #map {
+      height: 410px;
+      width: 100%;
+      border-radius: 0.75rem;
+      z-index: 10;
+    }
+    .avatar-option.selected {
+      border-color: #f43f5e;
+      background-color: rgba(244, 63, 94, 0.2);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+
+  <!-- BARRA SUPERIOR -->
+  <header class="bg-slate-900/95 border-b border-slate-800 sticky top-0 z-50 px-4 py-3 flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-rose-600 flex items-center justify-center shadow-md shadow-rose-600/30 font-bold text-xl">
+        ❤️
+      </div>
+      <div>
+        <h1 class="font-bold text-base sm:text-lg leading-tight flex items-center gap-2">
+          Cuidado Familiar
+          <span id="headerRoleBadge" class="hidden text-xs px-2.5 py-0.5 rounded-full font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30"></span>
+        </h1>
+        <p id="connectionStatusText" class="text-xs text-slate-400 flex items-center gap-1.5">
+          <span id="connectionDot" class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+          Configuración de perfil del dispositivo
+        </p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button id="btnInstallPwa" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow transition">
+        📲 Instalar App
+      </button>
+      <button id="btnOpenApkModal" class="bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 text-indigo-200 text-xs font-semibold px-3 py-2 rounded-lg transition">
+        🌐 Cómo Ver Online / APK
+      </button>
+      <button id="btnSwitchMode" class="hidden bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold px-3 py-2 rounded-lg transition">
+        👤 Cambiar Perfil
+      </button>
+    </div>
+  </header>
+
+  <!-- BANNER DE ALERTA CRÍTICA -->
+  <div id="criticalAlertBanner" class="hidden bg-rose-600 text-white px-4 py-4 shadow-2xl border-b-4 border-rose-300 z-40 animate-bounce">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">🚨</span>
+        <div>
+          <h2 id="criticalAlertTitle" class="font-extrabold text-lg uppercase tracking-wide">¡ALERTA FAMILIAR ACTIVA!</h2>
+          <p id="criticalAlertDesc" class="text-sm text-rose-100 font-medium"></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <button id="btnAlertConnectCam" class="bg-white text-rose-700 font-extrabold px-4 py-2 rounded-lg text-sm shadow hover:bg-rose-50 transition">
+          📹 Ver Cámara Ahora
+        </button>
+        <button id="btnDismissAlert" class="bg-rose-800 hover:bg-rose-900 text-white font-semibold px-3 py-2 rounded-lg text-sm border border-rose-400">
+          Silenciar Alarma
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- PANTALLA 1: CREAR / ELEGIR PERFIL DE ESTE DISPOSITIVO                   -->
+  <!-- ======================================================================= -->
+  <main id="setupScreen" class="flex-1 flex items-center justify-center p-4">
+    <div class="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
+      <div class="text-center space-y-1.5">
+        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+          Monitoreo Multi-Dispositivo para Toda la Familia
+        </span>
+        <h2 class="text-2xl font-extrabold text-white">Configurar Perfil de este Celular</h2>
+        <p class="text-xs sm:text-sm text-slate-400">
+          Cada integrante de la familia que instale la App con el mismo <strong>Código Familiar</strong> aparecerá con su propio perfil, ubicación, ruta y cámara en tu panel.
+        </p>
+      </div>
+
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+              1. Código Familiar Común
+            </label>
+            <input
+              id="inputFamilyCode"
+              type="text"
+              value="MAMA-2026"
+              placeholder="Ej: MAMA-2026"
+              class="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl px-4 py-2.5 text-base font-bold tracking-widest text-white uppercase outline-none"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+              2. Nombre de este Familiar
+            </label>
+            <input
+              id="inputMemberName"
+              type="text"
+              placeholder="Ej: Mamá, Ariel, Hermana, Papá..."
+              class="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl px-4 py-2.5 text-base text-white outline-none"
+            />
+          </div>
+        </div>
+
+        <!-- Selector de Ícono/Avatar para distinguir cada dispositivo en el mapa -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            3. Elige el Ícono de Perfil para el Mapa
+          </label>
+          <div class="grid grid-cols-6 gap-2" id="avatarPicker">
+            <button type="button" data-avatar="👵" data-default-name="Mamá" class="avatar-option selected border-2 border-slate-700 rounded-xl p-2 flex flex-col items-center gap-1 bg-slate-950 hover:bg-slate-800 transition">
+              <span class="text-2xl">👵</span>
+              <span class="text-[10px] text-slate-300 font-semibold">Mamá</span>
+            </button>
+            <button type="button" data-avatar="🛡️" data-default-name="Ariel" class="avatar-option border-2 border-slate-700 rounded-xl p-2 flex flex-col items-center gap-1 bg-slate-950 hover:bg-slate-800 transition">
+              <span class="text-2xl">🛡️</span>
+              <span class="text-[10px] text-slate-300 font-semibold">Cuidador</span>
+            </button>
+            <button type="button" data-avatar="👨" data-default-name="Hermano" class="avatar-option border-2 border-slate-700 rounded-xl p-2 flex flex-col items-center gap-1 bg-slate-950 hover:bg-slate-800 transition">
+              <span class="text-2xl">👨</span>
+              <span class="text-[10px] text-slate-300 font-semibold">Hijo/Hno</span>
+            </button>
+            <button type="button" data-avatar="👩" data-default-name="Hermana" class="avatar-option border-2 border-slate-700 rounded-xl p-2 flex flex-col items-center gap-1 bg-slate-950 hover:bg-slate-800 transition">
+              <span class="text-2xl">👩</span>
+              <span class="text-[10px] text-slate-300 font-semibold">Hija/Hna</span>
+            </button>
+            <button type="button" data-avatar="👴" data-default-name="Papá" class="avatar-option border-2 border-slate-700 rounded-xl p-2 flex flex-col items-center gap-1 bg-slate-950 hover:bg-slate-800 transition">
+              <span class="text-2xl">👴</span>
+              <span class="text-[10px] text-slate-300 font-semibold">Papá</span>
+            </button>
+            <button type="button" data-avatar="🏥" data-default-name="Asistente" class="avatar-option border-2 border-slate-700 rounded-xl p-2 flex flex-col items-center gap-1 bg-slate-950 hover:bg-slate-800 transition">
+              <span class="text-2xl">🏥</span>
+              <span class="text-[10px] text-slate-300 font-semibold">Asistente</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Selección del Modo de Pantalla -->
+        <div class="pt-1">
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+            4. ¿Qué pantalla debe usar este dispositivo?
+          </label>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <button
+              id="btnStartPatient"
+              class="group text-left p-4 rounded-2xl bg-gradient-to-br from-rose-600/20 to-rose-900/20 hover:from-rose-600/35 hover:to-rose-900/35 border-2 border-rose-500/50 hover:border-rose-400 transition flex flex-col justify-between space-y-2 shadow-lg"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-2xl">👵</span>
+                <span class="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-rose-600 text-white">Modo Asistido</span>
+              </div>
+              <div>
+                <h3 class="font-extrabold text-base text-white group-hover:text-rose-200">Pantalla Simple (Mamá / Paciente)</h3>
+                <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Botones gigantes SOS / Estoy Bien, detector de caídas y <strong>auto-respuesta automática de cámara y altavoz</strong>.
+                </p>
+              </div>
+            </button>
+
+            <button
+              id="btnStartCaregiver"
+              class="group text-left p-4 rounded-2xl bg-gradient-to-br from-blue-600/20 to-indigo-900/20 hover:from-blue-600/35 hover:to-indigo-900/35 border-2 border-blue-500/50 hover:border-blue-400 transition flex flex-col justify-between space-y-2 shadow-lg"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-2xl">🛡️</span>
+                <span class="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-blue-600 text-white">Mapa + Control</span>
+              </div>
+              <div>
+                <h3 class="font-extrabold text-base text-white group-hover:text-blue-200">Panel Familiar (Ver Todos)</h3>
+                <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Permite seleccionar y ver en el mapa a <strong>cada dispositivo de la familia</strong>, sus rutas individuales y conectar cámara/voz.
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ======================================================================= -->
+  <!-- PANTALLA 2: MODO CELULAR ASISTIDO (MAMÁ / PACIENTE)                     -->
+  <!-- ======================================================================= -->
+  <section id="patientScreen" class="hidden flex-1 flex flex-col p-4 max-w-2xl mx-auto w-full gap-4">
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-900 border border-slate-800 rounded-2xl p-3">
+      <div class="bg-slate-950 rounded-xl p-2.5 text-center">
+        <span class="text-[11px] text-slate-400 block uppercase font-semibold">GPS y Ruta</span>
+        <span id="ptGpsStatus" class="text-sm font-bold text-emerald-400">Activo</span>
+      </div>
+      <div class="bg-slate-950 rounded-xl p-2.5 text-center">
+        <span class="text-[11px] text-slate-400 block uppercase font-semibold">Movimiento</span>
+        <span id="ptMotionStatus" class="text-sm font-bold text-sky-400">En reposo</span>
+      </div>
+      <div class="bg-slate-950 rounded-xl p-2.5 text-center">
+        <span class="text-[11px] text-slate-400 block uppercase font-semibold">Batería</span>
+        <span id="ptBatteryStatus" class="text-sm font-bold text-amber-400">--%</span>
+      </div>
+      <div class="bg-slate-950 rounded-xl p-2.5 text-center">
+        <span class="text-[11px] text-slate-400 block uppercase font-semibold">Auto-Cámara</span>
+        <span id="ptIntercomStatus" class="text-sm font-bold text-emerald-400">Lista</span>
+      </div>
+    </div>
+
+    <div id="ptIncomingMessageCard" class="hidden bg-indigo-950 border-2 border-indigo-400 rounded-2xl p-4 shadow-xl text-center space-y-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-indigo-300">🔊 Mensaje de tu Familia:</p>
+      <p id="ptIncomingMessageText" class="text-2xl sm:text-3xl font-extrabold text-white leading-snug"></p>
+    </div>
+
+    <div id="ptVideoContainer" class="hidden bg-slate-900 border-2 border-emerald-500 rounded-2xl p-3 shadow-2xl space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
+          <span class="font-bold text-sm text-emerald-300">Cámara y Altavoz Familiar Conectados (Manos Libres)</span>
+        </div>
+        <span id="ptCameraFacingLabel" class="text-xs bg-slate-800 px-2.5 py-1 rounded-md text-slate-300">Cámara Frontal</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="relative bg-black rounded-xl overflow-hidden aspect-video border border-slate-700">
+          <video id="ptRemoteVideo" autoplay playsinline class="w-full h-full object-cover"></video>
+          <span class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">Familiar Conectado</span>
+        </div>
+        <div class="relative bg-black rounded-xl overflow-hidden aspect-video border border-slate-700">
+          <video id="ptLocalVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+          <span class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">Cámara Local</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="ptFallCountdownBox" class="hidden bg-amber-600 border-4 border-white rounded-3xl p-6 text-center shadow-2xl space-y-4">
+      <div class="text-5xl">⚠️</div>
+      <h3 class="text-2xl font-black text-white uppercase">¿Estás bien? Se detectó un golpe o caída</h3>
+      <p class="text-white font-semibold text-lg">
+        Se avisará automáticamente a tu familia en <span id="ptFallSeconds" class="text-3xl font-black underline">10</span> segundos.
+      </p>
+      <button
+        id="btnCancelFallAlert"
+        class="w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-2xl rounded-2xl border-2 border-white shadow-lg"
+      >
+        ✅ ESTOY BIEN (CANCELAR ALERTA)
+      </button>
+    </div>
+
+    <div class="flex-1 grid grid-cols-1 gap-4 my-1">
+      <button
+        id="btnPatientSOS"
+        class="w-full bg-gradient-to-r from-rose-600 to-red-700 active:scale-[0.98] hover:from-rose-500 hover:to-red-600 text-white rounded-3xl p-6 shadow-2xl shadow-rose-900/50 border-4 border-rose-300 flex flex-col items-center justify-center gap-2 transition"
+      >
+        <span class="text-5xl sm:text-6xl">🚨</span>
+        <span class="text-3xl sm:text-4xl font-black tracking-wide uppercase">NECESITO AYUDA</span>
+        <span class="text-sm sm:text-base font-medium text-rose-100">Toca aquí para avisar urgente a tu familia y activar el altavoz</span>
+      </button>
+
+      <button
+        id="btnPatientOk"
+        class="w-full bg-gradient-to-r from-emerald-600 to-teal-700 active:scale-[0.98] hover:from-emerald-500 hover:to-teal-600 text-white rounded-3xl p-6 shadow-xl border-4 border-emerald-300 flex flex-col items-center justify-center gap-2 transition"
+      >
+        <span class="text-4xl sm:text-5xl">✅</span>
+        <span class="text-2xl sm:text-3xl font-black tracking-wide uppercase">ESTOY BIEN</span>
+        <span class="text-sm font-medium text-emerald-100">Toca aquí para avisar que estás tranquila y sin problemas</span>
+      </button>
+    </div>
+
+    <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+      <div>
+        Código Familiar: <strong id="ptCodeLabel" class="text-white font-mono"></strong> ·
+        Fuerza G: <strong id="ptAccelValue" class="text-sky-400">9.8 m/s²</strong>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnSimulateFall" class="bg-slate-800 hover:bg-slate-700 text-amber-300 px-2.5 py-1 rounded border border-slate-700">
+          🧪 Simular Caída
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================= -->
+  <!-- PANTALLA 3: PANEL FAMILIAR MULTI-DISPOSITIVO                            -->
+  <!-- ======================================================================= -->
+  <section id="caregiverScreen" class="hidden flex-1 p-4 max-w-7xl mx-auto w-full space-y-4">
+
+    <!-- BARRA DE SELECCIÓN DE PERFILES / DISPOSITIVOS DE LA FAMILIA -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-xl space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-xs font-extrabold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            👨‍👩‍👧‍👦 Dispositivos y Perfiles de la Familia
+            <span id="cgRoomCodeBadge" class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-[11px]"></span>
+          </h2>
+          <p class="text-xs text-slate-400">
+            Toca cualquier integrante para ver su ubicación exacta, su ruta individual y conectar con su cámara o altavoz:
+          </p>
+        </div>
+
+        <button
+          id="btnSimulateDemoFamily"
+          class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition"
+          title="Agrega perfiles de prueba (Mamá, Papá, Hermana) para ver cómo lucen múltiples dispositivos en el mapa"
+        >
+          ➕ Simular Dispositivos Familiares de Prueba
+        </button>
+      </div>
+
+      <!-- Contenedor dinámico de tarjetas de perfiles familiares -->
+      <div id="profilesSelectorBar" class="flex items-center gap-2.5 overflow-x-auto pb-1">
+        <!-- Se llena dinámicamente desde app.js -->
+      </div>
+    </div>
+
+    <!-- TARJETAS DE ESTADO DEL PERFIL SELECCIONADO -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <span class="text-xs text-slate-400 block">Perfil Seleccionado</span>
+        <div class="flex items-center gap-2 mt-1">
+          <span id="cgPatientOnlineDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+          <strong id="cgPatientName" class="text-base font-bold text-white truncate">Todos</strong>
+        </div>
+        <span id="cgLastSeen" class="text-[11px] text-slate-400 block mt-1">En tiempo real</span>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <span class="text-xs text-slate-400 block">Estado y Movimiento</span>
+        <strong id="cgMotionState" class="text-base font-bold text-sky-400 block mt-1">--</strong>
+        <span id="cgAccelDetail" class="text-[11px] text-slate-400 block mt-1">Acelerómetro activo</span>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <span class="text-xs text-slate-400 block">Velocidad y Precisión</span>
+        <strong id="cgSpeedValue" class="text-base font-bold text-emerald-400 block mt-1">0.0 km/h</strong>
+        <span id="cgAccuracyValue" class="text-[11px] text-slate-400 block mt-1">Precisión GPS: -- m</span>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <span class="text-xs text-slate-400 block">Batería del Celular</span>
+        <strong id="cgBatteryValue" class="text-base font-bold text-amber-400 block mt-1">--%</strong>
+        <span id="cgChargingState" class="text-[11px] text-slate-400 block mt-1">--</span>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <span class="text-xs text-slate-400 block">Zona Segura (Geocerca)</span>
+        <strong id="cgGeofenceStatus" class="text-base font-bold text-emerald-400 block mt-1">No definida</strong>
+        <span id="cgDistanceToPatient" class="text-[11px] text-slate-400 block mt-1">Distancia a ti: --</span>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <span class="text-xs text-slate-400 block">Total Dispositivos</span>
+        <strong id="cgFamilyCount" class="text-base font-bold text-indigo-400 block mt-1">1 activo</strong>
+        <span id="routePointsCount" class="text-[11px] text-rose-400 font-semibold block mt-1">0 pts de ruta</span>
+      </div>
+    </div>
+
+    <!-- GRILLA PRINCIPAL: MAPA Y RUTAS (IZQUIERDA) + CÁMARA Y VOZ REMOTA (DERECHA) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+      <!-- COLUMNA IZQUIERDA (7 cols): MAPA GPS, RUTAS MULTICOLOR Y GEOCERCAS -->
+      <div class="lg:col-span-7 space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="font-bold text-base text-white flex items-center gap-2">
+                📍 Mapa Familiar en Tiempo Real y Rutas por Perfil
+              </h2>
+              <p class="text-xs text-slate-400">
+                Cada integrante tiene su propio color de marcador y de ruta recorrida.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button id="btnCenterSelected" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">
+                🎯 Centrar en Perfil
+              </button>
+              <button id="btnFitAllFamily" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">
+                🌍 Ver Todos en el Mapa
+              </button>
+              <button id="btnSetSafeZone" class="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                🛡️ Fijar Zona Segura
+              </button>
+              <button id="btnClearRoute" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700">
+                Limpiar Ruta
+              </button>
+            </div>
+          </div>
+
+          <!-- MAPA LEAFLET -->
+          <div id="map" class="border border-slate-700 shadow-inner"></div>
+
+          <!-- Detalle de Distancias entre Familiares y Geocerca -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-bold uppercase text-slate-400">👥 Ubicación y Distancia de Cada Familiar</span>
+              </div>
+              <div id="familyMembersList" class="space-y-1.5 max-h-32 overflow-y-auto text-xs">
+                <p class="text-slate-500">Cargando familiares...</p>
+              </div>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase text-slate-400">🛡️ Radio de Zona Segura</span>
+                <select id="selectSafeZoneRadius" class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-xs text-white">
+                  <option value="100">100 metros (Casa/Clínica)</option>
+                  <option value="250" selected>250 metros (Cuadra)</option>
+                  <option value="500">500 metros (Barrio)</option>
+                  <option value="1000">1000 metros (1 km)</option>
+                </select>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                Fija un perímetro seguro para el familiar seleccionado. Si sale del círculo verde, te avisará al instante con alarma sonora.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLUMNA DERECHA (5 cols): CÁMARA REMOTA, INTERCOMUNICADOR DE VOZ Y SONIDOS -->
+      <div class="lg:col-span-5 space-y-4">
+
+        <!-- TARJETA DE CÁMARA Y AUDIO REMOTO DEL PERFIL SELECCIONADO -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="font-bold text-base text-white flex items-center gap-2">
+                📹 Cámara y Altavoz de: <span id="cgTargetActionName" class="text-rose-400 underline">Mamá</span>
+              </h2>
+              <p class="text-xs text-slate-400">
+                Conecta en vivo con el dispositivo del familiar que tengas seleccionado arriba.
+              </p>
+            </div>
+            <span id="cgStreamBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 font-semibold">
+              Desconectado
+            </span>
+          </div>
+
+          <div class="relative bg-black rounded-xl overflow-hidden aspect-video border border-slate-700 flex items-center justify-center">
+            <video id="cgRemoteVideo" autoplay playsinline class="w-full h-full object-cover hidden"></video>
+            <img id="cgSnapshotFallback" alt="Vista previa cámara remota" class="w-full h-full object-cover hidden" />
+            <div id="cgVideoPlaceholder" class="text-center p-6 space-y-2">
+              <div class="text-4xl">📷</div>
+              <p class="text-xs text-slate-400 max-w-xs mx-auto">
+                Selecciona a un familiar en la barra superior y toca <strong>"Activar Cámara y Hablar en Vivo"</strong>.
+              </p>
+            </div>
+
+            <video id="cgLocalVideo" autoplay playsinline muted class="hidden absolute bottom-2 right-2 w-24 h-18 object-cover rounded-lg border-2 border-blue-500 shadow-lg bg-slate-900"></video>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              id="btnRemoteCameraStart"
+              class="col-span-2 bg-rose-600 hover:bg-rose-500 active:scale-[0.99] text-white font-extrabold py-3 px-4 rounded-xl shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 text-sm transition"
+            >
+              📹 Activar Cámara y Hablar en Vivo
+            </button>
+
+            <button
+              id="btnRemoteSwitchCam"
+              class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+            >
+              🔄 Cambiar Cámara (Frente/Atrás)
+            </button>
+
+            <button
+              id="btnRemoteSoundAlert"
+              class="bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 font-semibold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+            >
+              🔔 Sonar Timbre en su Celular
+            </button>
+
+            <button
+              id="btnToggleMyMic"
+              class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+            >
+              🎙️ Micrófono Activo (Hablando)
+            </button>
+
+            <button
+              id="btnRemoteCameraStop"
+              class="hidden bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+            >
+              ⏹️ Cortar Cámara
+            </button>
+          </div>
+        </div>
+
+        <!-- TARJETA DE HABLAR POR ALTAVOZ REMOTO (TEXT-TO-SPEECH) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl">
+          <div>
+            <h2 class="font-bold text-sm text-white flex items-center gap-2">
+              🗣️ Hablar por el Altavoz del Perfil Seleccionado
+            </h2>
+            <p class="text-xs text-slate-400">
+              Su teléfono reproducirá el mensaje con voz clara en español a volumen máximo:
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-1.5">
+            <button data-tts="Soy yo. Te estoy viendo y escuchando por la aplicación, quedate muy tranquila." class="tts-quick-btn text-left text-xs bg-slate-950 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-3 py-2 text-slate-200 transition">
+              🔊 "Soy yo. Te estoy viendo y escuchando, quedate muy tranquila."
+            </button>
+            <button data-tts="Si me escuchás bien, tocá el botón verde grande en la pantalla." class="tts-quick-btn text-left text-xs bg-slate-950 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-3 py-2 text-slate-200 transition">
+              🔊 "Si me escuchás bien, tocá el botón verde grande en la pantalla."
+            </button>
+            <button data-tts="Ya estoy yendo para allá, en unos minutos llego con vos." class="tts-quick-btn text-left text-xs bg-slate-950 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-3 py-2 text-slate-200 transition">
+              🔊 "Ya estoy yendo para allá, en unos minutos llego con vos."
+            </button>
+          </div>
+
+          <div class="flex gap-2">
+            <input
+              id="inputCustomTts"
+              type="text"
+              placeholder="Escribe un mensaje para que su celular lo hable..."
+              class="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white outline-none"
+            />
+            <button
+              id="btnSendCustomTts"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-xs shrink-0 transition"
+            >
+              🔊 Hablar
+            </button>
+          </div>
+        </div>
+
+        <!-- REGISTRO DE EVENTOS -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2 shadow-xl">
+          <div class="flex items-center justify-between">
+            <h2 class="font-bold text-sm text-white">📋 Historial Familiar de Eventos</h2>
+            <span class="text-[11px] text-slate-400">Tiempo real</span>
+          </div>
+          <div id="eventsLogContainer" class="space-y-1.5 max-h-40 overflow-y-auto text-xs pr-1">
+            <p class="text-slate-500">Esperando eventos de la sala familiar...</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- MODAL: CÓMO VER ONLINE DESDE CUALQUIER LUGAR (4G/5G) Y GENERAR APK -->
+  <div id="apkModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-lg font-extrabold text-white">🌐 Cómo ver a toda la familia Online (4G/5G) e instalar la APK</h3>
+        <button id="btnCloseApkModal" class="text-slate-400 hover:text-white text-xl font-bold px-2">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
+        <div class="bg-indigo-950/50 border border-indigo-500/40 rounded-xl p-4 space-y-2">
+          <h4 class="font-bold text-indigo-300 text-sm">1. ¿Cómo los veo Online cuando cada familiar está en la calle o en otra casa (con 4G/5G)?</h4>
+          <p>
+            La aplicación tiene <strong>dos motores de conexión simultáneos</strong>:
+          </p>
+          <ul class="list-disc list-inside space-y-1.5 text-slate-300">
+            <li>
+              <strong>Red Malla P2P en la Nube (PeerJS WebRTC Integrado):</strong> Cada vez que un familiar abre la app e ingresa el código (ej. <code>MAMA-2026</code>), se conecta automáticamente al Hub en la nube de PeerJS. Esto permite que el GPS, las alertas y la cámara funcionen por Internet aunque estén en distintas redes 4G/Wi-Fi.
+            </li>
+            <li>
+              <strong>Enlace Público en Internet 24/7 (Render / Railway / Túnel HTTPS):</strong> Para que todos entren desde cualquier lugar sin depender del Wi-Fi de tu PC, puedes subir esta carpeta gratis a <strong>Render.com</strong> (incluimos el archivo <code>render.yaml</code> listo) o abrir un túnel HTTPS público desde tu PC.
+            </li>
+          </ul>
+        </div>
+
+        <div class="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 space-y-2">
+          <h4 class="font-bold text-emerald-300 text-sm">2. ¿Cómo agregamos a varios familiares (Mamá, Papá, Hermanos)?</h4>
+          <ol class="list-decimal list-inside space-y-1 text-slate-300">
+            <li>Cada familiar abre la App en su celular.</li>
+            <li>Escribe el <strong>mismo Código Familiar</strong> (ej. <code>MAMA-2026</code>), pero pone <strong>su propio Nombre</strong> (ej. <em>"Mamá"</em>, <em>"Ariel"</em>, <em>"Hermana"</em>) y elige su ícono.</li>
+            <li>En tu pantalla aparecerá automáticamente una tarjeta por cada dispositivo arriba del mapa. Al tocar a cualquiera de ellos, ves su ruta propia y puedes activar su cámara o hablarle.</li>
+          </ol>
+          <div class="mt-2 p-2 bg-slate-950 rounded font-mono text-emerald-400 text-xs" id="serverUrlList">
+            Cargando dirección de red...
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button id="btnCloseApkModalBottom" class="bg-rose-600 hover:bg-rose-500 text-white font-bold px-5 py-2 rounded-xl text-sm">
+          Entendido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
