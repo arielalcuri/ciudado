@@ -243,6 +243,8 @@ app.post('/api/room/:code/command', (req, res) => {
 
   if (type === 'remove_member' && targetMemberId) {
     delete room.members[targetMemberId];
+    delete room.safeZones[targetMemberId];
+    room.routeHistory = room.routeHistory.filter((p) => p.memberId !== targetMemberId);
     broadcastToRoom(room, 'member_removed', { memberId: targetMemberId });
   }
 

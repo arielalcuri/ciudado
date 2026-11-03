@@ -303,11 +303,6 @@
         Código Familiar: <strong id="ptCodeLabel" class="text-white font-mono"></strong> ·
         Fuerza G: <strong id="ptAccelValue" class="text-sky-400">9.8 m/s²</strong>
       </div>
-      <div class="flex items-center gap-2">
-        <button id="btnSimulateFall" class="bg-slate-800 hover:bg-slate-700 text-amber-300 px-2.5 py-1 rounded border border-slate-700">
-          🧪 Simular Caída
-        </button>
-      </div>
     </div>
   </section>
 
@@ -321,20 +316,20 @@
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 class="text-xs font-extrabold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-            👨‍👩‍👧‍👦 Dispositivos y Perfiles de la Familia
+            👨‍👩‍👧‍👦 Dispositivos Conectados de la Familia
             <span id="cgRoomCodeBadge" class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-[11px]"></span>
           </h2>
           <p class="text-xs text-slate-400">
-            Toca cualquier integrante para ver su ubicación exacta, su ruta individual y conectar con su cámara o altavoz:
+            Aquí aparecen automáticamente los familiares reales a medida que ingresan con el código familiar:
           </p>
         </div>
 
         <button
-          id="btnSimulateDemoFamily"
-          class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition"
-          title="Agrega perfiles de prueba (Mamá, Papá, Hermana) para ver cómo lucen múltiples dispositivos en el mapa"
+          id="btnRemoveSelectedMember"
+          class="hidden bg-slate-800 hover:bg-rose-950 border border-slate-700 hover:border-rose-500/50 text-slate-300 hover:text-rose-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition"
+          title="Quitar el perfil seleccionado de la sala familiar"
         >
-          ➕ Simular Dispositivos Familiares de Prueba
+          🗑️ Quitar Perfil Seleccionado
         </button>
       </div>
 

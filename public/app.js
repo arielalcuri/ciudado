@@ -172,8 +172,8 @@ function formatDistance(meters) {
 let geoWatchId = null;
 function startGpsTracking() {
   if (!('geolocation' in navigator)) {
-    updateGpsBadge('No soportado', false);
-    useFallbackCoordinatesIfNeeded();
+    updateGpsBadge('GPS no disponible', false);
+    sendTelemetryUpdate();
     return;
   }
 
@@ -191,8 +191,8 @@ function startGpsTracking() {
       sendTelemetryUpdate();
     },
     () => {
-      updateGpsBadge('Ubicación aprox.', true);
-      useFallbackCoordinatesIfNeeded();
+      updateGpsBadge('Permiso GPS pendiente', false);
+      sendTelemetryUpdate();
     },
     {
       enableHighAccuracy: true,
@@ -200,16 +200,6 @@ function startGpsTracking() {
       timeout: 12000
     }
   );
-}
-
-function useFallbackCoordinatesIfNeeded() {
-  if (state.lat === null || state.lng === null) {
-    const offset = state.role === 'patient' ? 0 : 0.0016;
-    state.lat = -34.6037 + offset;
-    state.lng = -58.3816 + offset;
-    state.accuracy = 15;
-    sendTelemetryUpdate();
-  }
 }
 
 function updateGpsBadge(text, ok) {
@@ -457,6 +447,16 @@ function updateMapAndDashboard() {
     targetNameEl.textContent = focused ? `${focused.avatar || ''} ${focused.name}` : 'Toda la Familia';
   }
 
+  // Mostrar botón de quitar perfil solo cuando hay un perfil individual seleccionado
+  const removeBtn = el('btnRemoveSelectedMember');
+  if (removeBtn) {
+    if (state.selectedMemberId !== 'all' && state.members[state.selectedMemberId]) {
+      removeBtn.classList.remove('hidden');
+    } else {
+      removeBtn.classList.add('hidden');
+    }
+  }
+
   // Actualizar tarjetas superiores con el perfil seleccionado
   if (focused) {
     const ageSec = focused.lastSeen ? Math.round((Date.now() - new Date(focused.lastSeen).getTime()) / 1000) : 999;
@@ -675,9 +675,15 @@ function connectRoomSync() {
   sseSource.addEventListener('member_removed', (e) => {
     const { memberId } = JSON.parse(e.data);
     delete state.members[memberId];
+    delete state.safeZones[memberId];
+    state.routeHistory = state.routeHistory.filter((p) => p.memberId !== memberId);
     if (memberMarkers.has(memberId) && map) {
       map.removeLayer(memberMarkers.get(memberId));
       memberMarkers.delete(memberId);
+    }
+    if (memberRouteLines.has(memberId) && map) {
+      map.removeLayer(memberRouteLines.get(memberId));
+      memberRouteLines.delete(memberId);
     }
     updateMapAndDashboard();
   });
@@ -1214,88 +1220,7 @@ function stopCaregiverRemoteIntercom() {
 }
 
 // ============================================================================
-// 10. SIMULADOR DE DISPOSITIVOS FAMILIARES (PARA PROBAR MULTI-PERFIL EN VIVO)
-// ============================================================================
-async function simulateDemoFamilyProfiles() {
-  const baseLat = state.lat || -34.6037;
-  const baseLng = state.lng || -58.3816;
-
-  const demoMembers = [
-    {
-      memberId: 'demo_mama',
-      name: 'Mamá',
-      avatar: '👵',
-      role: 'patient',
-      lat: baseLat + 0.0012,
-      lng: baseLng - 0.0015,
-      speed: 1.4,
-      battery: 88,
-      charging: true,
-      motionState: 'Movimiento leve',
-      accelMag: 10.2
-    },
-    {
-      memberId: 'demo_papa',
-      name: 'Papá',
-      avatar: '👴',
-      role: 'caregiver',
-      lat: baseLat + 0.0014,
-      lng: baseLng - 0.0012,
-      speed: 0.0,
-      battery: 74,
-      charging: false,
-      motionState: 'En reposo',
-      accelMag: 9.8
-    },
-    {
-      memberId: 'demo_hermana',
-      name: 'Hermana (Auto)',
-      avatar: '👩',
-      role: 'caregiver',
-      lat: baseLat - 0.0028,
-      lng: baseLng + 0.0032,
-      speed: 34.5,
-      battery: 62,
-      charging: false,
-      motionState: 'En traslado',
-      accelMag: 12.1
-    }
-  ];
-
-  for (const dm of demoMembers) {
-    await fetch(`/api/room/${encodeURIComponent(state.familyCode)}/telemetry`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(dm)
-    });
-  }
-
-  // Simular movimiento continuo en sus rutas cada 3 segundos
-  if (state.demoInterval) clearInterval(state.demoInterval);
-  let step = 0;
-  state.demoInterval = setInterval(async () => {
-    step += 1;
-    for (let i = 0; i < demoMembers.length; i++) {
-      const dm = demoMembers[i];
-      const deltaLat = Math.sin(step * 0.4 + i) * 0.00025;
-      const deltaLng = Math.cos(step * 0.4 + i) * 0.00025;
-      dm.lat += deltaLat;
-      dm.lng += deltaLng;
-      try {
-        await fetch(`/api/room/${encodeURIComponent(state.familyCode)}/telemetry`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(dm)
-        });
-      } catch {}
-    }
-  }, 3000);
-
-  setTimeout(() => fitAllMembersOnMap(), 500);
-}
-
-// ============================================================================
-// 11. INICIO Y EVENTOS DE INTERFAZ
+// 10. INICIO Y EVENTOS DE INTERFAZ
 // ============================================================================
 function startRoleSession(role) {
   getAudioContext();
@@ -1390,8 +1315,12 @@ window.addEventListener('DOMContentLoaded', () => {
     el('setupScreen')?.classList.remove('hidden');
   });
 
-  el('btnSimulateDemoFamily')?.addEventListener('click', () => {
-    simulateDemoFamilyProfiles();
+  el('btnRemoveSelectedMember')?.addEventListener('click', () => {
+    if (state.selectedMemberId && state.selectedMemberId !== 'all') {
+      const targetId = state.selectedMemberId;
+      state.selectedMemberId = 'all';
+      sendCommandToRoom('remove_member', 'Perfil eliminado de la sala.', {}, targetId);
+    }
   });
 
   // Botones del celular de Mamá
@@ -1409,7 +1338,6 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   el('btnCancelFallAlert')?.addEventListener('click', () => cancelFallCountdown());
-  el('btnSimulateFall')?.addEventListener('click', () => triggerFallCountdown());
 
   // Botones del Mapa y Panel Cuidador
   el('btnCenterSelected')?.addEventListener('click', () => {
