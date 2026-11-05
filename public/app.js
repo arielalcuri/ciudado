@@ -715,8 +715,38 @@ function connectRoomSync() {
   });
 
   sseSource.onerror = () => {
-    updateConnectionIndicator(true, `Red P2P Online Activa (${state.familyCode})`);
+    updateConnectionIndicator(true, `Reconectando en 2do plano (${state.familyCode})`);
+    setTimeout(() => {
+      if (state.role) connectRoomSync();
+    }, 5000);
   };
+}
+
+const processedCommandIds = new Set();
+async function pollServerState() {
+  if (!state.role) return;
+  try {
+    const res = await fetch(`/api/room/${encodeURIComponent(state.familyCode)}/state`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.members) {
+      state.members = data.members;
+      updateMapAndDashboard();
+    }
+    if (Array.isArray(data.recentCommands)) {
+      data.recentCommands.forEach((cmd) => {
+        if (cmd.id && !processedCommandIds.has(cmd.id)) {
+          processedCommandIds.add(cmd.id);
+          handleIncomingCommand(cmd);
+        }
+      });
+      if (processedCommandIds.size > 200) {
+        const arr = Array.from(processedCommandIds);
+        processedCommandIds.clear();
+        arr.slice(-100).forEach((id) => processedCommandIds.add(id));
+      }
+    }
+  } catch (err) {}
 }
 
 function updateConnectionIndicator(ok, text) {
@@ -1253,11 +1283,12 @@ function startRoleSession(role) {
   connectRoomSync();
   initPeerJS();
 
-  // Keep-Alive para que el servidor de Render nunca entre en reposo mientras un teléfono esté activo
+  // Keep-Alive agresivo y polling de comandos para que nunca se desconecte en segundo plano
   if (state.keepAliveTimer) clearInterval(state.keepAliveTimer);
   state.keepAliveTimer = setInterval(() => {
     sendTelemetryUpdate();
-  }, 45000);
+    pollServerState();
+  }, 10000);
 
   if (role === 'patient') {
     el('patientScreen')?.classList.remove('hidden');

@@ -31,11 +31,17 @@ jobs:
           npm install
           npx cap add android || npx cap sync android
 
-      - name: Inyectar permisos de GPS, Cámara, Micrófono y WakeLock en AndroidManifest.xml
+      - name: Instalar Servicio Nativo en 2do Plano (KeepAliveService + MainActivity) y Permisos
         run: |
+          JAVA_DIR="android/app/src/main/java/com/familia/cuidadofamiliar"
+          mkdir -p "$JAVA_DIR"
+          cp -f android-src/KeepAliveService.java "$JAVA_DIR/KeepAliveService.java"
+          cp -f android-src/MainActivity.java "$JAVA_DIR/MainActivity.java"
+
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ]; then
-            sed -i 's|<application|<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <application|g' "$MANIFEST"
+            sed -i 's|<application|<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <application|g' "$MANIFEST"
+            sed -i 's|</application>|    <service android:name=".KeepAliveService" android:enabled="true" android:exported="false" android:foregroundServiceType="location" />\n    </application>|g' "$MANIFEST"
           fi
 
       - name: Compilar APK con Gradle
@@ -49,4 +55,3 @@ jobs:
         with:
           name: CuidadoFamiliar-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
-

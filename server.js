@@ -32,9 +32,10 @@ function getRoom(code) {
   if (!familyRooms.has(normalized)) {
     familyRooms.set(normalized, {
       code: normalized,
-      members: {},       // memberId -> { id, name, avatar, color, role, lat, lng, accuracy, speed, battery, charging, motionState, accelMag, lastSeen, peerId }
+      members: {},       // memberId -> { id, name, avatar, color, role, lat, lng, accuracy, speed, battery, charging, motionState, accelMag, lastSeen, peerId, bgMode }
       routeHistory: [],  // [{ memberId, name, color, lat, lng, timestamp, speed, motionState }]
       alerts: [],        // [{ id, type, message, timestamp, senderName, targetMemberId, lat, lng }]
+      recentCommands: [],// Últimos comandos para respaldo en 2do plano
       safeZones: {},     // memberId -> { lat, lng, radiusMeters }
       clients: new Set() // Clientes SSE conectados
     });
@@ -80,7 +81,7 @@ app.get('/api/room/:code/stream', (req, res) => {
       clearInterval(keepAlive);
       room.clients.delete(res);
     }
-  }, 20000);
+  }, 12000);
 
   req.on('close', () => {
     clearInterval(keepAlive);
@@ -88,14 +89,19 @@ app.get('/api/room/:code/stream', (req, res) => {
   });
 });
 
-// Obtener estado actual de la sala familiar
+// Obtener estado actual de la sala familiar (incluye comandos recientes para teléfonos en 2do plano)
 app.get('/api/room/:code/state', (req, res) => {
   const room = getRoom(req.params.code);
+  const cutoff = Date.now() - 35000;
+  const recentCommands = room.recentCommands.filter(
+    (c) => new Date(c.timestamp).getTime() > cutoff
+  );
   res.json({
     code: room.code,
     members: room.members,
     routeHistory: room.routeHistory.slice(-600),
     alerts: room.alerts.slice(-60),
+    recentCommands,
     safeZones: room.safeZones
   });
 });
@@ -226,6 +232,10 @@ app.post('/api/room/:code/command', (req, res) => {
     room.alerts.push(eventObj);
     if (room.alerts.length > 200) room.alerts.shift();
   }
+
+  // Guardar en comandos recientes para polling en 2do plano
+  room.recentCommands.push(eventObj);
+  if (room.recentCommands.length > 60) room.recentCommands.shift();
 
   if (type === 'set_safe_zone' && payload?.safeZone && payload?.memberId) {
     room.safeZones[payload.memberId] = payload.safeZone;
