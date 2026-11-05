@@ -12,43 +12,55 @@ jobs:
       - name: Descargar código
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Configurar Java JDK 21
+      - name: Configurar Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Instalar dependencias y generar proyecto Android Capacitor
+      - name: Instalar dependencias
         run: |
           npm install
+
+      - name: Crear plataforma Android con Capacitor
+        run: |
           npx cap add android || npx cap sync android
 
-      - name: Instalar Servicio Nativo en 2do Plano (KeepAliveService + MainActivity) y Permisos
+      - name: Inyectar KeepAliveService y MainActivity para segundo plano permanente
         run: |
           JAVA_DIR="android/app/src/main/java/com/familia/cuidadofamiliar"
           mkdir -p "$JAVA_DIR"
-          cp -f android-src/KeepAliveService.java "$JAVA_DIR/KeepAliveService.java"
-          cp -f android-src/MainActivity.java "$JAVA_DIR/MainActivity.java"
+          if [ -d "android-src" ]; then
+            cp -f android-src/KeepAliveService.java "$JAVA_DIR/KeepAliveService.java"
+            cp -f android-src/MainActivity.java "$JAVA_DIR/MainActivity.java"
+          fi
 
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ]; then
-            sed -i 's|<application|<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <application|g' "$MANIFEST"
-            sed -i 's|</application>|    <service android:name=".KeepAliveService" android:enabled="true" android:exported="false" android:foregroundServiceType="location" />\n    </application>|g' "$MANIFEST"
+            # Inyectar permisos si no están
+            if ! grep -q "ACCESS_FINE_LOCATION" "$MANIFEST"; then
+              sed -i 's|<application|<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n    <application|g' "$MANIFEST"
+            fi
+            # Inyectar servicio si no está
+            if ! grep -q "KeepAliveService" "$MANIFEST"; then
+              sed -i 's|</application>|    <service android:name=".KeepAliveService" android:enabled="true" android:exported="false" android:foregroundServiceType="location" />\n    </application>|g' "$MANIFEST"
+            fi
           fi
 
-      - name: Compilar APK con Gradle
-        working-directory: ./android
+      - name: Sincronizar cambios en Android
         run: |
+          npx cap sync android
+
+      - name: Compilar APK con Gradle
+        run: |
+          cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Publicar archivo CuidadoFamiliar.apk listo para descargar
         uses: actions/upload-artifact@v4
